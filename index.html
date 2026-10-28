@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Explore New York City's catch basin network, 311 reports, and precipitation through an interactive D3.js map and timeline.">
+  <meta name="theme-color" content="#091c2e">
+  <title>The Iron Grid | NYC Stormwater Explorer</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='8' fill='%23252b30'/%3E%3Cpath d='M10 10v20m7-20v20m7-20v20m7-20v20M7 16h27M7 24h27' stroke='%23ffffff' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="preload" href="BarlowCondensed-Black.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+  <script src="d3.min.js" defer></script>
+  <script type="module" src="app.mjs"></script>
+</head>
+<body>
+<a class="skip" href="#map">Skip to map</a>
+<main class="atlas" id="explorer" aria-label="NYC catch basin map">
+  <div class="workspace" id="workspace" aria-busy="true"><div class="map-wrap" id="map-wrap">
+    <canvas id="map" tabindex="0" aria-label="NYC street drains and 311 reports. Drag to move, scroll to zoom, or use Layers to explore an area."></canvas>
+    <div class="map-tooltip" id="map-tooltip" hidden></div>
+  </div></div>
+  <header class="map-header">
+    <div class="wordmark"><h1>The Iron Grid</h1><p>NYC street drains</p></div>
+    <nav class="map-controls" aria-label="Map controls">
+      <div id="filter-controls" class="filter-controls">
+        <div class="control-field"><label for="borough">Borough</label><select id="borough"><option value="0">All NYC</option></select></div>
+        <div class="control-field"><label for="metric">Show</label><select id="metric"><option value="basins">Catch basins (drains)</option><option value="reports">311 reports</option><option value="ratio">Reports / 100 drains</option></select></div>
+      </div>
+      <details id="layers-panel" class="layers-panel"><summary>Layers</summary><div class="layers-content">
+        <label for="map-style">Map view</label><select id="map-style"><option value="points">Individual points</option><option value="hex">1 km² areas</option></select>
+        <label for="category">Reported problem</label><select id="category"><option value="-1">All problems</option></select>
+        <label class="check"><input type="checkbox" id="report-dots"> Show report points</label>
+        <p id="metric-note" class="field-note">Each area covers 1 km².</p>
+        <div class="layer-links"><button id="east-village">Explore the East Village</button><button id="most-reports">Explore an area with many reports</button><button id="export">Download area counts</button><button id="reset">Reset map</button></div>
+      </div></details>
+      <button id="open-guide" class="nav-link guide-link" aria-expanded="false" aria-controls="guide"><span class="help-mark" aria-hidden="true">?</span> Guide</button>
+      <button id="open-about" class="nav-link">About</button>
+    </nav>
+  </header>
+  <div id="guide-invite" class="guide-invite" hidden><span>New to the map?</span><button id="start-guide">Show me around <span aria-hidden="true">↗</span></button><button id="dismiss-invite" aria-label="Dismiss guide invitation">×</button></div>
+  <div id="load-state" class="load-state" role="status">Loading map…</div>
+  <aside class="area-panel" id="area-panel" hidden aria-label="Selected area">
+    <div class="panel-heading"><span>Selected area</span><button id="close-area" aria-label="Close area details">×</button></div>
+    <div id="selection" aria-live="polite"></div><button id="pin-cell" class="plain-link" disabled>Add to comparison</button><div id="pins"></div>
+  </aside>
+  <div class="map-info"><div class="map-readout"><span id="map-title">Catch basins</span><span id="view-label">Individual points</span></div><div id="map-legend" class="map-legend"></div><div class="stats"><span><strong id="count-basins">—</strong> drains</span><span><strong id="count-reports">—</strong> reports</span></div></div>
+  <div class="map-tools" id="map-navigation" aria-label="Map navigation"><button id="zoom-in" aria-label="Zoom in">+</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-reset" class="fit-button" aria-label="Show all NYC">Fit</button></div>
+  <div class="map-help">Drag to move · Scroll to zoom · Click for details</div>
+  <details id="rain-panel" class="rain-dock">
+    <summary><span class="dock-title">Rain &amp; reports</span><span id="active-period">All dates</span><span class="dock-invite">Choose dates</span></summary>
+    <div class="rain-content">
+      <div class="date-controls">
+        <h2>Pick a date range</h2><p class="date-intro">Your dates filter reports on the map.</p>
+        <fieldset class="date-fields"><legend class="sr-only">Report dates</legend><div><label for="date-start">Start</label><input type="date" id="date-start"></div><div><label for="date-end">End</label><input type="date" id="date-end"></div></fieldset>
+        <p id="date-error" class="date-error" role="alert"></p><button id="all-dates" class="plain-link">Show all dates</button>
+        <p class="chart-note">Or drag across the charts to select dates.</p>
+      </div>
+      <div class="chart-container"><div class="timeline-intro"><h2>Compare rain with reports</h2><span>Same dates · Different units</span><button id="timeline-focus" class="plain-link" hidden>Zoom to dates</button></div><div id="timeline" class="timeline" aria-label="Two charts: daily rainfall above, daily 311 reports below"></div><div class="chart-footer"><div id="date-live" aria-live="polite"></div></div><div class="storm-row"><span>Try a wet day</span><div id="storm-buttons"></div><span class="storm-note">Shows 2 days before + 4 after.</span></div></div>
+    </div>
+  </details>
+</main>
+<div id="guide-focus" class="guide-focus" hidden aria-hidden="true"></div>
+<aside id="guide" class="guide-panel" hidden aria-labelledby="guide-title">
+  <div class="guide-top"><span>Map guide <span id="guide-number"></span></span><button id="guide-close" aria-label="Close guide">×</button></div>
+  <nav id="guide-steps" class="guide-steps" aria-label="Guide steps"></nav>
+  <p id="guide-where" class="guide-where"></p><h2 id="guide-title" tabindex="-1"></h2><p id="guide-copy"></p>
+  <div class="guide-footer"><button id="guide-back">Back</button><button id="guide-next">Next <span aria-hidden="true">→</span></button></div>
+  <p class="guide-footnote">Sources and limits are in About.</p>
+  <span id="guide-status" class="sr-only" role="status"></span>
+</aside>
+<dialog id="about" aria-labelledby="about-title">
+  <div class="dialog-heading"><h2 id="about-title">About the map</h2><button id="close-about" aria-label="Close About">×</button></div>
+  <p class="about-intro">Street drains are easy to miss. Explore where they sit, what people report, and what changes around wet days.</p>
+  <button id="open-tour" class="plain-link">Show me how to use it <span aria-hidden="true">↗</span></button>
+  <section class="about-section"><h3>Your current view</h3><p id="about-context" class="about-context"></p><dl class="about-totals"><div><dt>mapped drains</dt><dd id="about-basins">—</dd></div><div><dt>311 reports</dt><dd id="about-reports">—</dd></div></dl><p class="snapshot-note">Saved records, not live conditions. Reports are a supplied subset.</p></section>
+  <section class="about-section reading-key"><h3>How to read the map</h3><p><i class="key-dot cyan" aria-hidden="true"></i><span><strong>Cyan</strong> · Catch basins: drains that collect street runoff.</span></p><p><i class="key-dot amber" aria-hidden="true"></i><span><strong>Orange</strong> · Drain problems reported to 311.</span></p><p class="about-small">In area view, brighter means more. Each area covers 1 km².</p><p id="ratio-explanation" class="about-small" hidden>Reports / 100 drains = area reports ÷ mapped drains × 100. Reports are not linked to individual drains; this is not a failure rate.</p></section>
+  <section class="about-section"><h3>What people reported</h3><p class="about-small">Share of reports matching your filters.</p><div id="categories"></div></section>
+  <section class="about-section"><h3>Keep in mind</h3><ul class="short-notes"><li>Reports are requests, not confirmed failures.</li><li>Drain counts do not show condition or capacity.</li><li>Rain is measured at Central Park, not across every borough.</li></ul></section>
+  <div class="method-details concise-method">
+    <details><summary>Data preparation &amp; downloads</summary><p id="data-audit"></p><ul class="short-notes"><li>Checked missing values, repeated IDs and locations.</li><li>Restored report dates by request number.</li><li>Kept drain IDs separate from report IDs.</li><li>Grouped locations into equal 1 km² areas.</li></ul><p class="about-small">Rain readings use NOAA quality checks; missing values stay missing. Several reports can concern one place. Reporting access and delays affect the record. No complainant names, contacts or street addresses are shown.</p><div class="download-links"><a href="manifest.json" download>Full data notes</a><a href="cleaning_audit.csv" download>Cleaning summary</a><a href="enriched_complaints.csv" download>Reports with dates</a></div><p class="about-small">Next: compare official flood scenarios and more rain gauges.</p></details>
+    <details><summary>Sources &amp; project notes</summary><ul id="source-list"></ul><p class="about-small">For civil engineers, planners and curious New Yorkers. Theme: Undercurrents—the infrastructure beneath everyday city life.</p><p class="about-small">The prototype supports place, problem and date comparisons. It cannot establish drainage performance or whether rain caused a report. Next steps need flood maps, terrain and broader rainfall coverage.</p><p class="about-small">Gallery goals: Understanding · Usefulness · Design · Transparency.</p></details>
+  </div>
+  <footer>Abhijeet Khirdekar · The Cooper Union · Undercurrents, 2026</footer>
+</dialog>
+</body></html>
